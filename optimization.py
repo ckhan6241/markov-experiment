@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import numpy.random as random
+import matplotlib.pyplot as plt
 from random import sample
 from defs import *
 from transition_probability import TransitionProbability, random_perturbation, NO_STATIONARY_PROB
@@ -21,12 +22,12 @@ def cross(transition_probability1, transition_probability2, restriction_manager)
     return new_tp
 
 
-def square_error_cost(transition_probability, target_stationary_prob):
+def mean_square_error_cost(transition_probability, target_stationary_prob):
     stationary_prob = transition_probability.get_stationary_probabilities()
     if stationary_prob == NO_STATIONARY_PROB:
         return np.inf
     else:
-        cost = np.sum(np.square(stationary_prob - target_stationary_prob))
+        cost = np.mean(np.square(stationary_prob - target_stationary_prob))
         return cost
 
 
@@ -65,7 +66,7 @@ class Optimiser:
             raise ValueError('Complete restriction, no optimization room')
         self.rm = rm
         trans = [TransitionProbability(size, fixed_transition_probability) for i in range(config[POPULATION_SIZE])]
-        trans = [(square_error_cost(transition_probability, stationary_prob), transition_probability) for
+        trans = [(mean_square_error_cost(transition_probability, stationary_prob), transition_probability) for
                  transition_probability in trans]
         trans = filter(lambda x: x[0] != np.inf, trans)
         self.trans = sorted(trans, key=lambda x: x[0])
@@ -79,6 +80,7 @@ class Optimiser:
     def optimize(self, verbose=False):
         if verbose:
             start = time.time()
+            costs = []
         for i in range(self.config[MAX_ITERATION]):
             if verbose:
                 print 'Iteration: {}'.format(i)
@@ -98,12 +100,23 @@ class Optimiser:
             survivals = stratified_sampling(trans, self.config[POPULATION_SIZE] - self.config[ELITISM] - self.config[
                 OFFSPRING])
             new_gen = survivals + offsprings
-            new_gen = [(square_error_cost(tran, self.stationary_prob), tran) for tran in new_gen]
+            new_gen = [(mean_square_error_cost(tran, self.stationary_prob), tran) for tran in new_gen]
             new_gen = filter(lambda x: x[0] != np.inf, new_gen)
             self.trans = sorted(elites + new_gen, key=lambda x: x[0])
+            if verbose:
+                costs.append([x[0] for x in self.trans])
         if verbose:
             end = time.time()
             print 'Best cost: {}\nTime elapsed: {}'.format(self.trans[0][0], end - start)
+            plt.figure(1)
+            for j in range(0, i-1, max((i-1)/9, 1)):
+                plt.plot(costs[j], label=j)
+            plt.plot(costs[-1], label=i)
+            plt.legend()
+
+            plt.figure(2)
+            plt.plot([cost[0] for cost in costs])
+            return plt
 
     def get_results(self):
         return self.trans[0]
@@ -132,7 +145,7 @@ if __name__ == '__main__':
         assert (trans3.get_prob(i) == trans1.get_prob(i)).all() or (trans3.get_prob(i) == trans2.get_prob(i)).all()
 
     trans4 = TransitionProbability(0, np.array([[0.5, 0.5, 0.0], [0.25, 0.5, 0.25], [0.0, 0.5, 0.5]]), to_copy=True)
-    assert np.isclose(square_error_cost(trans4, [0.25, 0.5, 0.25]), 0)
+    assert np.isclose(mean_square_error_cost(trans4, [0.25, 0.5, 0.25]), 0)
 
     sample = stratified_sampling(zip([5., 5., 5., 2., 2., 2.], [1, 1, 1, 0, 0, 0]), 3)
     assert np.mean(sample) > 0.5
